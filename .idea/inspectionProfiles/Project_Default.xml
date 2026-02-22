@@ -1,0 +1,50 @@
+<component name="InspectionProjectProfileManager">
+  <profile version="1.0">
+    <option name="myName" value="Project Default" />
+    <inspection_tool class="PyPackageRequirementsInspection" enabled="true" level="WARNING" enabled_by_default="true">
+      <option name="ignoredPackages">
+        <list>
+          <option value="cloudpickle" />
+          <option value="contourpy" />
+          <option value="cycler" />
+          <option value="filelock" />
+          <option value="fonttools" />
+          <option value="fsspec" />
+          <option value="gym" />
+          <option value="Jinja2" />
+          <option value="kiwisolver" />
+          <option value="MarkupSafe" />
+          <option value="matplotlib" />
+          <option value="networkx" />
+          <option value="numpy" />
+          <option value="packaging" />
+          <option value="pillow" />
+          <option value="pyparsing" />
+          <option value="python-dateutil" />
+          <option value="setuptools" />
+          <option value="six" />
+          <option value="torch" />
+          <option value="torchvision" />
+          <option value="torchaudio" />
+          <option value="transformers" />
+          <option value="timm" />
+          <option value="pandas" />
+          <option value="opencv-python" />
+          <option value="scikit-learn" />
+          <option value="scipy" />
+          <option value="seaborn" />
+          <option value="plotly" />
+          <option value="tqdm" />
+          <option value="jupyter" />
+          <option value="notebook" />
+          <option value="ipywidgets" />
+          <option value="pyyaml" />
+          <option value="python-dotenv" />
+          <option value="nvidia-ml-py3" />
+          <option value="rich" />
+          <option value="tensorboard" />
+        </list>
+      </option>
+    </inspection_tool>
+  </profile>
+</component>
