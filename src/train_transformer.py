@@ -9,14 +9,13 @@ from torchvision import models, transforms
 from tqdm import tqdm
 import pandas as pd
 import numpy as np
-from torch.cuda.amp import GradScaler
 from dataset import ChestXrayDataset
 
 
 # --- Early Stopping Class ---
 class EarlyStopping:
     def __init__(self, patience=3, verbose=False, delta=0,
-                 path=r'C:\Users\srbuh\Desktop\Medical_AI_Diagnosis\models\resnet50_best.pth'):
+                 path=r'C:\Users\srbuh\Desktop\Medical_AI_Diagnosis\models\swin_best.pth'):
         self.patience = patience
         self.verbose = verbose
         self.counter = 0
@@ -54,7 +53,7 @@ class EarlyStopping:
 
 BATCH_SIZE = 8
 NUM_EPOCHS = 15
-LEARNING_RATE = 1e-4
+LEARNING_RATE = 5e-5  # Transformer-ի համար ավելի ցածր LR ենք դնում (ResNet-ի 1e-4-ի փոխարեն)
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 NUM_WORKERS = 0
 
@@ -63,10 +62,10 @@ MODELS_DIR = r'C:\Users\srbuh\Desktop\Medical_AI_Diagnosis\models'
 
 
 def train_model():
-    print(f" Training on device: {DEVICE}")
+    print(f" Training Swin Transformer on device: {DEVICE}")
 
-    # Scaler for AMP
-    scaler = GradScaler()
+    # AMP Scaler
+    scaler = torch.amp.GradScaler()
 
     train_transform = transforms.Compose([
         transforms.Resize((224, 224)),
@@ -100,18 +99,24 @@ def train_model():
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=NUM_WORKERS)
     val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS)
 
-    print(" Loading ResNet50...")
-    model = models.resnet50(pretrained=True)
-    num_ftrs = model.fc.in_features
-    model.fc = nn.Linear(num_ftrs, 14)
+    # --- MODEL: SWIN TRANSFORMER ---
+    print(" Loading Swin Transformer (Tiny)...")
+    # weights='DEFAULT' նշանակում է IMAGENET1K_V1
+    model = models.swin_t(weights='DEFAULT')
+
+    # Swin-ի դեպքում վերջին շերտը կոչվում է 'head', ոչ թե 'fc'
+    num_ftrs = model.head.in_features
+    model.head = nn.Linear(num_ftrs, 14)
+
     model = model.to(DEVICE)
 
-    optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
+    # Optimizer (AdamW is better for Transformers)
+    optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=0.01)
 
     # --- RESUME LOGIC ---
     start_epoch = 0
     for e in range(NUM_EPOCHS, 0, -1):
-        path = os.path.join(MODELS_DIR, f"resnet50_epoch_{e}.pth")
+        path = os.path.join(MODELS_DIR, f"swin_epoch_{e}.pth")
         if os.path.exists(path):
             print(f" Found checkpoint: {path}")
             model.load_state_dict(torch.load(path, map_location=DEVICE))
@@ -125,17 +130,17 @@ def train_model():
     pos_weights_tensor = torch.tensor(POS_WEIGHTS).to(DEVICE)
     criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weights_tensor)
 
-    early_stopping = EarlyStopping(patience=3, verbose=True, path=os.path.join(MODELS_DIR, 'resnet50_best.pth'))
+    early_stopping = EarlyStopping(patience=3, verbose=True, path=os.path.join(MODELS_DIR, 'swin1_best.pth'))
 
-    history_path = os.path.join(MODELS_DIR, "training_log_cnn.csv")
+    # Separate log file for Transformer
+    history_path = os.path.join(MODELS_DIR, "swin1_training_log.csv")
     if os.path.exists(history_path) and start_epoch > 0:
-        print(" Loading logs...")
         df_history = pd.read_csv(history_path)
         history = df_history.to_dict(orient='list')
     else:
         history = {'epoch': [], 'train_loss': [], 'val_loss': []}
 
-    print("\n Starting Training (Safe Mode + Fixed Validation)...")
+    print("\n Starting Training (Swin Transformer)...")
 
     for epoch in range(start_epoch, NUM_EPOCHS):
         print(f"\nEpoch {epoch + 1}/{NUM_EPOCHS}")
@@ -152,12 +157,16 @@ def train_model():
 
             optimizer.zero_grad()
 
-            # Training with AMP
             with torch.amp.autocast(device_type='cuda', dtype=torch.float16):
                 outputs = model(images)
                 loss = criterion(outputs, labels)
 
             scaler.scale(loss).backward()
+
+            # Gradient Clipping (Շատ կարևոր է Transformer-ի համար)
+            scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+
             scaler.step(optimizer)
             scaler.update()
 
@@ -182,7 +191,6 @@ def train_model():
                 images = images.to(DEVICE)
                 labels = labels.to(DEVICE)
 
-                # Validation with AMP
                 with torch.amp.autocast(device_type='cuda', dtype=torch.float16):
                     outputs = model(images)
                     loss = criterion(outputs, labels)
@@ -203,7 +211,8 @@ def train_model():
         os.makedirs(MODELS_DIR, exist_ok=True)
         df_history.to_csv(history_path, index=False)
 
-        checkpoint_path = os.path.join(MODELS_DIR, f"resnet50_epoch_{epoch + 1}.pth")
+        # Save Checkpoint
+        checkpoint_path = os.path.join(MODELS_DIR, f"swin_epoch_{epoch + 1}.pth")
         torch.save(model.state_dict(), checkpoint_path)
         print(f" Checkpoint saved to {checkpoint_path}")
 
@@ -214,13 +223,13 @@ def train_model():
         time.sleep(10)
 
         if early_stopping.early_stop:
-            print("🛑 Early stopping triggered!")
+            print(" Early stopping triggered!")
             break
 
         gc.collect()
         torch.cuda.empty_cache()
 
-    print("\n🎉 Training Complete!")
+    print("\n Swin Transformer Training Complete!")
 
 
 if __name__ == "__main__":
